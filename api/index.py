@@ -24,7 +24,6 @@ def home():
 @app.route('/get_ohlc')
 def get_ohlc():
     symbol = request.args.get('symbol')
-    logging.debug(f"Fetching OHLC data for symbol: {symbol}")  # Log the requested symbol
     try:
         # Fetch OHLC data
         data = yf.download(symbol + '.NS', period='7d', interval='1d')
@@ -39,11 +38,11 @@ def get_ohlc():
         
         # Convert to a list of dictionaries
         result = data.to_dict(orient='records')  # Use orient='records' for a list of dictionaries
-        logging.debug(f"Data fetched for {symbol}: {result}")  # Log the fetched data
+        # logging.debug(f"Data fetched for {symbol}: {result}")  # Log the fetched data
         return jsonify(result)
     except Exception as e:
         # Log the error for debugging
-        logging.error(f"Error fetching data for {symbol}: {e}")
+        # logging.error(f"Error fetching data for {symbol}: {e}")
         return jsonify({"error": str(e)}), 500
         
 # Vercel looks for an 'app' callable
