@@ -1,35 +1,45 @@
-from flask import Flask, render_template, jsonify, request
+import os
+import csv
+from flask import Flask, jsonify, render_template, request
 import yfinance as yf
-import pandas as pd
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="../templates", static_folder="../static")
+
+# Load stock symbols from CSV
+def load_stock_symbols():
+    stock_symbols = []
+    csv_path = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
+    with open(csv_path, mode='r') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            stock_symbols.append(row['symbol'])
+    return stock_symbols
 
 @app.route('/')
-def index():
-    # Load stock symbols from CSV
-    stock_symbols = pd.read_csv('data/stocks.csv')['symbol'].tolist()
+def home():
+    # Fetch stock symbols to display in dropdown
+    stock_symbols = load_stock_symbols()
     return render_template('index.html', stock_symbols=stock_symbols)
 
 @app.route('/get_ohlc')
 def get_ohlc():
-    symbol = request.args.get('symbol')
-    try:
-        # Fetch OHLC data
-        data = yf.download(symbol + '.NS', period='3mo', interval='1d')
-        data.reset_index(inplace=True)
+    # Get the stock symbol from the query string
+    symbol = request.args.get('symbol', 'RELIANCE')
+    nse_symbol = f"{symbol}.NS"  # Append .NS to the symbol for NSE stocks
 
-        # Ensure the time is converted to string
-        data['time'] = data['Date'].astype(str)
-        
-        # Select and rename columns
-        data = data[['time', 'Open', 'High', 'Low', 'Close']]
-        data.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close'}, inplace=True)
-        
-        # Convert to a list of dictionaries
-        result = data.to_dict(orient='records')  # Use orient='records' for a list of dictionaries
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Fetch OHLC data from yfinance
+    data = yf.download(nse_symbol, period="1mo", interval="1d")
+    ohlc_data = []
+    for date, row in data.iterrows():
+        ohlc_data.append({
+            "time": int(date.timestamp()),
+            "open": row['Open'],
+            "high": row['High'],
+            "low": row['Low'],
+            "close": row['Close']
+        })
 
-if __name__ == '__main__':
-    app.run(debug=True)
+    return jsonify(ohlc_data)
+
+# Vercel looks for an 'app' callable
+app = app
