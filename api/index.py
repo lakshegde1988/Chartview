@@ -23,23 +23,28 @@ def home():
 
 @app.route('/get_ohlc')
 def get_ohlc():
-    # Get the stock symbol from the query string
-    symbol = request.args.get('symbol', 'RELIANCE')
-    nse_symbol = f"{symbol}.NS"  # Append .NS to the symbol for NSE stocks
-
-    # Fetch OHLC data from yfinance
-    data = yf.download(nse_symbol, period="1mo", interval="1d")
-    ohlc_data = []
-    for date, row in data.iterrows():
-        ohlc_data.append({
-            "time": int(date.timestamp()),
-            "open": row['Open'],
-            "high": row['High'],
-            "low": row['Low'],
-            "close": row['Close']
-        })
-
-    return jsonify(ohlc_data)
-
+    symbol = request.args.get('symbol')
+    logging.debug(f"Fetching OHLC data for symbol: {symbol}")  # Log the requested symbol
+    try:
+        # Fetch OHLC data
+        data = yf.download(symbol + '.NS', period='7d', interval='1d')
+        data.reset_index(inplace=True)
+        
+        # Ensure the time is converted to string
+        data['time'] = data['Date'].astype(str)
+        
+        # Select and rename columns
+        data = data[['time', 'Open', 'High', 'Low', 'Close']]
+        data.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close'}, inplace=True)
+        
+        # Convert to a list of dictionaries
+        result = data.to_dict(orient='records')  # Use orient='records' for a list of dictionaries
+        logging.debug(f"Data fetched for {symbol}: {result}")  # Log the fetched data
+        return jsonify(result)
+    except Exception as e:
+        # Log the error for debugging
+        logging.error(f"Error fetching data for {symbol}: {e}")
+        return jsonify({"error": str(e)}), 500
+        
 # Vercel looks for an 'app' callable
 app = app
