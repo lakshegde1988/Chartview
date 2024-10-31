@@ -1,38 +1,43 @@
-import os
-import csv
-import pandas as pd
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, render_template, jsonify, request
 import yfinance as yf
+import pandas as pd
+import logging
 
-app = Flask(__name__, template_folder="../templates", static_folder="../static")
+app = Flask(__name__)
 
-# Load stock symbols from CSV
-def load_stock_symbols():
-    stock_symbols = []
-    csv_path = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
-    with open(csv_path, mode='r') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            stock_symbols.append(row['symbol'])
-    return stock_symbols
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
 
 @app.route('/')
-def home():
-    stock_symbols = load_stock_symbols()
+def index():
+    # Load stock symbols from CSV
+    stock_symbols = pd.read_csv('data/stocks.csv')['Symbol'].tolist()
     return render_template('index.html', stock_symbols=stock_symbols)
 
 @app.route('/get_ohlc')
 def get_ohlc():
-    symbol = request.args.get('symbol', 'RELIANCE')
-    nse_symbol = f"{symbol}.NS"
-    
-    # Fetch OHLC data using yfinance and load it into a DataFrame
-    data = yf.download(nse_symbol, period="1mo", interval="1d")
-    df = pd.DataFrame(data)
-    df.reset_index(inplace=True)
-    df['time'] = df['Date'].apply(lambda x: int(x.timestamp()))  # Convert date to timestamp
+    symbol = request.args.get('symbol')
+    logging.debug(f"Fetching OHLC data for symbol: {symbol}")  # Log the requested symbol
+    try:
+        # Fetch OHLC data
+        data = yf.download(symbol + '.NS', period='3mo', interval='1d')
+        data.reset_index(inplace=True)
 
-    ohlc_data = df[['time', 'Open', 'High', 'Low', 'Close']].to_dict(orient="records")
-    return jsonify(ohlc_data)
+        # Ensure the time is converted to string
+        data['time'] = data['Date'].astype(str)
+        
+        # Select and rename columns
+        data = data[['time', 'Open', 'High', 'Low', 'Close']]
+        data.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close'}, inplace=True)
+        
+        # Convert to a list of dictionaries
+        result = data.to_dict(orient='records')  # Use orient='records' for a list of dictionaries
+        logging.debug(f"Data fetched for {symbol}: {result}")  # Log the fetched data
+        return jsonify(result)
+    except Exception as e:
+        # Log the error for debugging
+        logging.error(f"Error fetching data for {symbol}: {e}")
+        return jsonify({"error": str(e)}), 500
 
-app = app
+if __name__ == '__main__':
+    app.run(debug=True)
