@@ -26,7 +26,7 @@ def get_ohlc():
     symbol = request.args.get('symbol')
     try:
         # Fetch OHLC data
-        data = yf.download(symbol + '.NS', period='7d', interval='1d')
+        data = yf.download(symbol + '.NS', period='3mo', interval='1d')
         data.reset_index(inplace=True)
         
         # Ensure the time is converted to string
