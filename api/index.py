@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.DEBUG)
 @app.route('/')
 def index():
     # Load stock symbols from CSV
-    stock_symbols = pd.read_csv('data/stocks.csv')['Symbol'].tolist()
+    stock_symbols = pd.read_csv('data/stocks.csv')['symbol'].tolist()
     return render_template('index.html', stock_symbols=stock_symbols)
 
 @app.route('/get_ohlc')
