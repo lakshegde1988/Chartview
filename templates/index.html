@@ -42,9 +42,9 @@ def get_ohlc():
 
         return jsonify(ohlc_data)
     except Exception as e:
-        print(f"Error: {str(e)}")
+        # Log the error to Vercel logs
+        print(f"Error fetching OHLC data for {nse_symbol}: {str(e)}")
         return jsonify({"error": "Internal Server Error", "message": str(e)}), 500
-
 # Vercel looks for an 'app' callable
 if __name__ == '__main__':
     app.run()
