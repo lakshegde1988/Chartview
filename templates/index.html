@@ -3,62 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock OHLC Chart</title>
-    
-    <!-- Tailwind CSS CDN -->
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    
-    <!-- TradingView Lightweight Charts CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.5.0/dist/lightweight-charts.standalone.production.js"></script>
+    <title>TradingView OHLC Chart</title>
+    <style>
+        #chart {
+            width: 100%;
+            height: 500px;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 font-sans">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">Stock OHLC Chart</h1>
-        
-        <div class="flex flex-col items-center">
-            <label for="symbol" class="text-gray-600 font-medium mb-2">Select a stock:</label>
-            <select id="symbol" class="bg-white border border-gray-300 rounded-md p-2 mb-6 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {% for stock in stock_symbols %}
-                    <option value="{{ stock }}">{{ stock }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        
-        <div id="chart" class="bg-white rounded-lg shadow-md p-4 max-w-4xl mx-auto" style="width: 100%; height: 500px;"></div>
-    </div>
+<body>
+    <h1>TradingView OHLC Chart</h1>
+    <div id="chart"></div>
+
+    <!-- TradingView Lightweight Charts library -->
+    <script src="/static/lightweight-charts.js"></script>
 
     <script>
-        const symbolSelect = document.getElementById('symbol');
-        const chartElement = document.getElementById('chart');
-
-        // Initialize the chart with custom styles
-        const chart = LightweightCharts.createChart(chartElement, {
-            width: chartElement.clientWidth,
-            height: 500,
-            layout: { backgroundColor: '#f8fafc', textColor: '#374151' },
-            grid: { vertLines: { color: '#e5e7eb' }, horzLines: { color: '#e5e7eb' } }
-        });
-        const candleSeries = chart.addCandlestickSeries();
-
-        // Fetch and display OHLC data
-        function fetchAndDisplayData(symbol) {
-            fetch(`/get_ohlc?symbol=${symbol}`)
-                .then(response => response.json())
-                .then(data => candleSeries.setData(data));
+        async function fetchOHLC(symbol) {
+            const response = await fetch(`/get_ohlc?symbol=${symbol}`);
+            const data = await response.json();
+            return data;
         }
 
-        // Load initial data
-        fetchAndDisplayData(symbolSelect.value);
+        async function loadChart() {
+            const chartData = await fetchOHLC('AAPL');  // Default symbol, change as needed
 
-        // Update chart when a new symbol is selected
-        symbolSelect.addEventListener('change', () => {
-            fetchAndDisplayData(symbolSelect.value);
-        });
+            const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+                width: 600,
+                height: 400,
+            });
 
-        // Responsive resizing
-        window.addEventListener('resize', () => {
-            chart.resize(chartElement.clientWidth, 500);
-        });
+            const candleSeries = chart.addCandlestickSeries();
+
+            candleSeries.setData(chartData);
+        }
+
+        loadChart();
     </script>
 </body>
 </html>
