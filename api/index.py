@@ -1,55 +1,50 @@
-# index.py
 from flask import Flask, jsonify, request
 import yfinance as yf
 import pandas as pd
 import os
+import json
 
 app = Flask(__name__)
 
-# Path to your CSV file with stock names
-CSV_PATH = "data/stocks.csv"
+# Adjust the path to locate stocks.csv within the correct directory
+CSV_PATH = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
 
-@app.route("/get_ohlc", methods=["GET"])
+@app.route('/')
+def home():
+    return "Welcome to the Stock OHLC Data API!"
+
+@app.route('/get_ohlc', methods=['GET'])
 def get_ohlc():
     try:
-        # Check if CSV file exists
-        if not os.path.exists(CSV_PATH):
-            print("CSV file not found")
-            return jsonify({"error": "CSV file not found"}), 500
-
-        # Read stock symbols from CSV and append '.NS' suffix
-        stock_symbols = pd.read_csv(CSV_PATH)["symbol"].tolist()
+        # Load stocks from the CSV file
+        stocks_df = pd.read_csv(CSV_PATH)
         
-        # Fetch data for the first stock symbol for testing
-        stock_symbol = stock_symbols[0] + ".NS" if stock_symbols else None
-        if not stock_symbol:
-            print("No stock symbol found in CSV")
-            return jsonify({"error": "No stock symbol found in CSV"}), 400
-
-        print(f"Fetching data for {stock_symbol}...")
-
-        # Fetch OHLC data for the stock
-        stock_data = yf.download(stock_symbol, period="1mo", interval="1d")
+        # Extract the symbol parameter from the query string
+        stock_name = request.args.get('symbol')
+        if not stock_name or stock_name not in stocks_df['Symbol'].values:
+            return jsonify({"error": "Stock symbol not provided or not found in CSV."}), 400
         
-        # Reset index to access date column as a separate column
-        stock_data.reset_index(inplace=True)
-        print("Downloaded data:", stock_data.head())
-
-        # Prepare JSON-friendly data
-        ohlc_data = stock_data[["Date", "Open", "High", "Low", "Close"]].copy()
-        ohlc_data["Date"] = ohlc_data["Date"].dt.strftime('%Y-%m-%d')  # Convert date to string
-
-        # Convert dataframe to a list of dictionaries
-        data_to_return = ohlc_data.to_dict(orient="records")
-        print("Formatted data to JSON:", data_to_return[:5])  # Print first few rows for debug
-
-        return jsonify(data_to_return)
-
+        # Append '.NS' suffix for NSE stock data
+        stock_symbol = f"{stock_name}.NS"
+        
+        # Fetch OHLC data from yfinance
+        data = yf.download(stock_symbol, period='1d', interval='1m')
+        if data.empty:
+            return jsonify({"error": "No data found for the given symbol."}), 404
+        
+        # Convert the DataFrame to JSON-friendly format
+        ohlc_data = data[['Open', 'High', 'Low', 'Close']].reset_index()
+        ohlc_data['Datetime'] = ohlc_data['Datetime'].astype(str)
+        
+        # Format data as a list of dictionaries for JSON output
+        ohlc_json = ohlc_data.to_dict(orient='records')
+        
+        return jsonify(ohlc_json)
+    
     except Exception as e:
-        print("Error in /get_ohlc:", e)
-        return jsonify({"error": str(e)}), 500
+        print(f"[ERROR] {e}")
+        return jsonify({"error": "An error occurred while processing the request."}), 500
 
-# For local testing
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
     
