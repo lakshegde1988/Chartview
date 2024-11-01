@@ -1,50 +1,70 @@
-from flask import Flask, jsonify, request
-import yfinance as yf
-import os
-import csv
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock OHLC Chart</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    
+    <!-- TradingView Lightweight Charts CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.5.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">Stock OHLC Chart</h1>
+        
+        <div class="flex flex-col items-center">
+            <label for="symbol" class="text-gray-600 font-medium mb-2">Select a stock:</label>
+            <select id="symbol" aria-label="Select a stock" class="bg-white border border-gray-300 rounded-md p-2 mb-6 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {% for stock in stock_symbols %}
+                    <option value="{{ stock }}">{{ stock }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div id="chart" class="bg-white rounded-lg shadow-md p-4 max-w-4xl mx-auto" style="width: 100%; height: 500px;"></div>
+    </div>
 
-app = Flask(__name__)
+    <script>
+        const symbolSelect = document.getElementById('symbol');
+        const chartElement = document.getElementById('chart');
 
-# Load stock symbols from CSV
-def load_stock_symbols():
-    stock_symbols = []
-    csv_path = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
-    with open(csv_path, mode='r') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            stock_symbols.append(row['symbol'])
-    return stock_symbols
+        // Initialize the chart with custom styles
+        const chart = LightweightCharts.createChart(chartElement, {
+            width: chartElement.clientWidth,
+            height: 500,
+            layout: { backgroundColor: '#f8fafc', textColor: '#374151' },
+            grid: { vertLines: { color: '#e5e7eb' }, horzLines: { color: '#e5e7eb' } }
+        });
+        const candleSeries = chart.addCandlestickSeries();
 
-@app.route('/')
-def home():
-    stock_symbols = load_stock_symbols()
-    return jsonify(stock_symbols=stock_symbols)
+        // Fetch and display OHLC data
+        function fetchAndDisplayData(symbol) {
+            fetch(`/get_ohlc?symbol=${symbol}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => candleSeries.setData(data))
+                .catch(error => console.error('There was a problem with the fetch operation:', error));
+        }
 
-@app.route('/get_ohlc')
-def get_ohlc():
-    symbol = request.args.get('symbol', 'RELIANCE')
-    nse_symbol = f"{symbol}.NS"
+        // Load initial data
+        fetchAndDisplayData(symbolSelect.value);
 
-    try:
-        data = yf.download(nse_symbol, period="1mo", interval="1d")
-        if data.empty:
-            return jsonify({"error": "No data found for this symbol"}), 404
+        // Update chart when a new symbol is selected
+        symbolSelect.addEventListener('change', () => {
+            fetchAndDisplayData(symbolSelect.value);
+        });
 
-        ohlc_data = []
-        for date, row in data.iterrows():
-            ohlc_data.append({
-                "time": int(date.timestamp() * 1000),
-                "open": row['Open'],
-                "high": row['High'],
-                "low": row['Low'],
-                "close": row['Close']
-            })
-
-        return jsonify(ohlc_data)
-    except Exception as e:
-        # Log the error to Vercel logs
-        print(f"Error fetching OHLC data for {nse_symbol}: {str(e)}")
-        return jsonify({"error": "Internal Server Error", "message": str(e)}), 500
-# Vercel looks for an 'app' callable
-if __name__ == '__main__':
-    app.run()
+        // Responsive resizing
+        window.addEventListener('resize', () => {
+            chart.resize(chartElement.clientWidth, 500);
+        });
+    </script>
+</body>
+</html>
