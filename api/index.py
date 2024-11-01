@@ -1,49 +1,55 @@
-import os
-import csv
-from flask import Flask, jsonify, render_template, request
+# index.py
+from flask import Flask, jsonify, request
 import yfinance as yf
+import pandas as pd
+import os
 
-app = Flask(__name__, template_folder="../templates", static_folder="../static")
+app = Flask(__name__)
 
-# Load stock symbols from CSV
-def load_stock_symbols():
-    stock_symbols = []
-    csv_path = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
-    with open(csv_path, mode='r') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            stock_symbols.append(row['symbol'])
-    return stock_symbols
+# Path to your CSV file with stock names
+CSV_PATH = "data/stocks.csv"
 
-@app.route('/')
-def home():
-    # Fetch stock symbols to display in dropdown
-    stock_symbols = load_stock_symbols()
-    return render_template('index.html', stock_symbols=stock_symbols)
-
-@app.route('/get_ohlc')
+@app.route("/get_ohlc", methods=["GET"])
 def get_ohlc():
-    symbol = request.args.get('symbol')
     try:
-        # Fetch OHLC data
-        data = yf.download(symbol + '.NS', period='3mo', interval='1d')
-        data.reset_index(inplace=True)
+        # Check if CSV file exists
+        if not os.path.exists(CSV_PATH):
+            print("CSV file not found")
+            return jsonify({"error": "CSV file not found"}), 500
+
+        # Read stock symbols from CSV and append '.NS' suffix
+        stock_symbols = pd.read_csv(CSV_PATH)["symbol"].tolist()
         
-        # Ensure the time is converted to string
-        data['time'] = data['Date'].astype(str)
+        # Fetch data for the first stock symbol for testing
+        stock_symbol = stock_symbols[0] + ".NS" if stock_symbols else None
+        if not stock_symbol:
+            print("No stock symbol found in CSV")
+            return jsonify({"error": "No stock symbol found in CSV"}), 400
+
+        print(f"Fetching data for {stock_symbol}...")
+
+        # Fetch OHLC data for the stock
+        stock_data = yf.download(stock_symbol, period="1mo", interval="1d")
         
-        # Select and rename columns
-        data = data[['time', 'Open', 'High', 'Low', 'Close']]
-        data.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close'}, inplace=True)
-        
-        # Convert to a list of dictionaries
-        result = data.to_dict(orient='records')  # Use orient='records' for a list of dictionaries
-        # logging.debug(f"Data fetched for {symbol}: {result}")  # Log the fetched data
-        return jsonify(result)
+        # Reset index to access date column as a separate column
+        stock_data.reset_index(inplace=True)
+        print("Downloaded data:", stock_data.head())
+
+        # Prepare JSON-friendly data
+        ohlc_data = stock_data[["Date", "Open", "High", "Low", "Close"]].copy()
+        ohlc_data["Date"] = ohlc_data["Date"].dt.strftime('%Y-%m-%d')  # Convert date to string
+
+        # Convert dataframe to a list of dictionaries
+        data_to_return = ohlc_data.to_dict(orient="records")
+        print("Formatted data to JSON:", data_to_return[:5])  # Print first few rows for debug
+
+        return jsonify(data_to_return)
+
     except Exception as e:
-        # Log the error for debugging
-        # logging.error(f"Error fetching data for {symbol}: {e}")
+        print("Error in /get_ohlc:", e)
         return jsonify({"error": str(e)}), 500
-        
-# Vercel looks for an 'app' callable
-app = app
+
+# For local testing
+if __name__ == "__main__":
+    app.run(debug=True)
+    
