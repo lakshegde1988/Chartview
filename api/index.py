@@ -1,46 +1,30 @@
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, render_template, request
 import yfinance as yf
-import pandas as pd
-import os
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
-
-# Path for stocks CSV file
-CSV_PATH = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
+app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
 @app.route('/')
 def home():
-    # Render the HTML UI
-    return render_template("index.html")
+    return render_template('index.html')
 
-@app.route('/get_ohlc', methods=['GET'])
+@app.route('/get_ohlc')
 def get_ohlc():
-    try:
-        if not os.path.exists(CSV_PATH):
-            return jsonify({"error": "stocks.csv file not found"}), 404
-        stocks_df = pd.read_csv(CSV_PATH)
+    # Get the stock symbol from the query string
+    symbol = request.args.get('symbol', 'AAPL')
+    data = yf.download(symbol, period="1mo", interval="1d")
 
-        stock_name = request.args.get('symbol')
-        if not stock_name:
-            return jsonify({"error": "Stock symbol parameter is required."}), 400
-        if stock_name not in stocks_df['Symbol'].values:
-            return jsonify({"error": f"Stock symbol '{stock_name}' not found in CSV."}), 404
+    # Prepare OHLC data in the format TradingView Lightweight Charts expects
+    ohlc_data = []
+    for date, row in data.iterrows():
+        ohlc_data.append({
+            "time": int(date.timestamp()),
+            "open": row['Open'],
+            "high": row['High'],
+            "low": row['Low'],
+            "close": row['Close']
+        })
 
-        stock_symbol = f"{stock_name}.NS"
-        data = yf.download(stock_symbol, period='1d', interval='1m')
-        if data.empty:
-            return jsonify({"error": "No data available for the specified stock symbol."}), 404
+    return jsonify(ohlc_data)
 
-        ohlc_data = data[['Open', 'High', 'Low', 'Close']].reset_index()
-        ohlc_data['Datetime'] = ohlc_data['Datetime'].astype(str)
-        ohlc_json = ohlc_data.to_dict(orient='records')
-
-        return jsonify(ohlc_json)
-    
-    except Exception as e:
-        print(f"[ERROR] {e}")
-        return jsonify({"error": "An unexpected error occurred."}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True)
-    
+# Vercel looks for an 'app' callable
+app = app
