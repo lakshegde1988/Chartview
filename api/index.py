@@ -1,52 +1,47 @@
-import os
-import csv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, request, render_template
 import yfinance as yf
 import pandas as pd
+import os
 
-app = Flask(__name__, template_folder="../templates", static_folder="../static")
+app = Flask(__name__, template_folder="templates", static_folder="static")
 
-# Load stock symbols from CSV
-def load_stock_symbols():
-    stock_symbols = []
-    csv_path = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
-    with open(csv_path, mode='r') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            stock_symbols.append(row['symbol'])
-    return stock_symbols
+# Load stock symbols from CSV file
+CSV_PATH = os.path.join(os.path.dirname(__file__), '../data/stocks.csv')
 
 @app.route('/')
 def home():
-    # Fetch stock symbols to display in dropdown
-    stock_symbols = load_stock_symbols()
-    return render_template('index.html', stock_symbols=stock_symbols)
+    return render_template("index.html")
 
-@app.route('/get_ohlc')
+@app.route('/get_ohlc', methods=['GET'])
 def get_ohlc():
-    # Get the stock symbol from the query string
-    symbol = request.args.get('symbol', 'RELIANCE')
-    nse_symbol = f"{symbol}.NS"  # Append .NS to the symbol for NSE stocks
+    stock_symbol = request.args.get('symbol')
+    
+    if not stock_symbol:
+        return jsonify({"error": "No stock symbol provided"}), 400
 
-    # Fetch OHLC data from yfinance
-    try:
-        data = yf.download(nse_symbol, period="1mo", interval="1d")
-        if data.empty:
-            return jsonify({"error": "No data found for this symbol"}), 404
+    # Ensure symbol exists in CSV
+    stocks_df = pd.read_csv(CSV_PATH)
+    if stock_symbol not in stocks_df['Symbol'].values:
+        return jsonify({"error": "Symbol not found in CSV"}), 404
+    
+    # Fetch OHLC data
+    symbol =f"{stock_symbol}.NS"
+    stock_data = yf.download(symbol, period="3mo", interval="1d")
+    if stock_data.empty:
+        return jsonify({"error": "No data found"}), 404
 
-        ohlc_data = []
-        for date, row in data.iterrows():
-            ohlc_data.append({
-                "time": int(date.timestamp()),
-                "open": row['Open'],
-                "high": row['High'],
-                "low": row['Low'],
-                "close": row['Close']
-            })
+    # Format OHLC data for Lightweight Charts
+    ohlc_data = [
+        {
+            "time": int(row.name.timestamp()),
+            "open": row['Open'],
+            "high": row['High'],
+            "low": row['Low'],
+            "close": row['Close']
+        }
+        for row in stock_data.itertuples()
+    ]
+    return jsonify(ohlc_data)
 
-        return jsonify(ohlc_data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# Vercel looks for an 'app' callable
-app = app
+if __name__ == '__main__':
+    app.run(debug=True)
